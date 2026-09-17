@@ -1,0 +1,36 @@
+# docker compose up --build
+version: "3.9"
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports: ["1883:1883"]
+    volumes: ["./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf"]
+
+  ingestion:
+    build: .
+    command: python ingestion/ingestion_service.py
+    depends_on: [mosquitto]
+    environment: [MQTT_HOST=mosquitto]
+    volumes: ["./data:/app/data"]
+
+  inference:
+    build: .
+    command: python ml/inference_service.py
+    depends_on: [mosquitto, ingestion]
+    environment: [MQTT_HOST=mosquitto]
+    volumes: ["./data:/app/data", "./ml/models:/app/ml/models"]
+
+  simulator:
+    build: .
+    command: python simulator/sensor_simulator.py
+    depends_on: [mosquitto]
+    environment: [MQTT_HOST=mosquitto]
+    # replace with real hardware publishers once sensors are deployed
+
+  api:
+    build: .
+    command: uvicorn api.app:app --host 0.0.0.0 --port 8000
+    depends_on: [ingestion]
+    ports: ["8000:8000"]
+    volumes: ["./data:/app/data"]
